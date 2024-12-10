@@ -1,0 +1,102 @@
+﻿-- Tabel Customer
+CREATE TABLE Customer (
+    CustomerID INT IDENTITY(1,1) PRIMARY KEY,
+    CustomerCode NVARCHAR(20) NOT NULL UNIQUE,
+    CustomerName NVARCHAR(50) NOT NULL,
+    CustomerAddress NVARCHAR(200)
+);
+
+-- Tabel Teller
+CREATE TABLE Teller (
+    TellerID INT IDENTITY(1,1) PRIMARY KEY,
+    TellerName NVARCHAR(50) NOT NULL
+);
+
+-- Tabel Opening Balance
+CREATE TABLE OpeningBalance (
+    BalanceID INT IDENTITY(1,1) PRIMARY KEY,
+    TellerID INT NOT NULL,
+    OpeningBalance MONEY NOT NULL,
+    BalanceDate DATE NOT NULL,
+    FOREIGN KEY (TellerID) REFERENCES Teller(TellerID)
+);
+
+-- Tabel Transaction
+CREATE TABLE Transactions (
+    TransactionID INT IDENTITY(1,1) PRIMARY KEY,
+    TellerID INT NOT NULL,
+    CustomerID INT NOT NULL,
+    TransactionType NVARCHAR(10) CHECK (TransactionType IN ('Deposit', 'Withdrawal', 'Exchange')),
+    Currency NVARCHAR(10) NOT NULL,
+    Amount MONEY NOT NULL,
+    TransactionDate DATETIME DEFAULT GETDATE(),
+    FOREIGN KEY (TellerID) REFERENCES Teller(TellerID),
+    FOREIGN KEY (CustomerID) REFERENCES Customer(CustomerID)
+);
+
+
+--Tambahkan Data ke Tabel Customer
+INSERT INTO Customer (CustomerCode, CustomerName, CustomerAddress)
+VALUES 
+    ('CUST001', 'John Doe', '123 Main Street'),
+    ('CUST002', 'Jane Smith', '456 Elm Street');
+
+-- Tambahkan Data ke Tabel Teller
+INSERT INTO Teller (TellerName)
+VALUES ('Alice'), ('Bob');
+
+-- Tambahkan Saldo Awal
+INSERT INTO OpeningBalance (TellerID, OpeningBalance, BalanceDate)
+VALUES 
+    (1, 1000.00, '2024-12-01'),
+    (2, 2000.00, '2024-12-01');
+
+-- Create View EndOfDayReconciliation
+CREATE VIEW EndOfDayReconciliation AS
+SELECT 
+    t.TellerID,
+    SUM(CASE WHEN TransactionType = 'Deposit' THEN Amount ELSE 0 END) AS TotalDeposits,
+    SUM(CASE WHEN TransactionType = 'Withdrawal' THEN Amount ELSE 0 END) AS TotalWithdrawals,
+    (ob.OpeningBalance + SUM(CASE WHEN TransactionType = 'Deposit' THEN Amount ELSE 0 END) 
+        - SUM(CASE WHEN TransactionType = 'Withdrawal' THEN Amount ELSE 0 END)) AS ClosingBalance
+FROM Transactions t
+JOIN OpeningBalance ob ON t.TellerID = ob.TellerID
+GROUP BY t.TellerID, ob.OpeningBalance;
+
+-- Create SP Add Transaction
+CREATE PROCEDURE AddTransaction
+    @TellerID INT,
+    @CustomerID INT,
+    @TransactionType NVARCHAR(10),
+    @Currency NVARCHAR(10),
+    @Amount MONEY
+AS
+BEGIN
+    INSERT INTO Transactions (TellerID, CustomerID, TransactionType, Currency, Amount)
+    VALUES (@TellerID, @CustomerID, @TransactionType, @Currency, @Amount);
+END;
+
+-- Create SP EndOfDayReconciliationSP
+CREATE PROCEDURE EndOfDayReconciliationSP
+AS
+BEGIN
+    SELECT * FROM EndOfDayReconciliation;
+END;
+
+-- EXEC SP Add Transaction
+EXEC AddTransaction 
+    @TellerID = 1, 
+    @CustomerID = 1, 
+    @TransactionType = 'Deposit', 
+    @Currency = 'USD', 
+    @Amount = 500.00;
+
+-- EXEC SP EndOfDayReconciliationSP
+EXEC EndOfDayReconciliationSP;
+
+-- Select
+select * from Customer
+select * from Teller
+select * from OpeningBalance
+select * from Transactions
+select * from EndOfDayReconciliation
